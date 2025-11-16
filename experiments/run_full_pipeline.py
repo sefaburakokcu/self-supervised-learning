@@ -1,17 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import timm
 import wandb
 import argparse
 import sys
 
 from pathlib import Path
-from torchvision.models import resnet18, resnet50
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from data.stl10_dataset import STL10DataModule
+from models.backbones import create_encoder
 from models.ssl_methods.simclr import SimCLR
 from models.ssl_methods.moco import MoCoV3
 from models.ssl_methods.byol import BYOL
@@ -19,19 +18,6 @@ from models.ssl_methods.mae import MAE
 from trainers.ssl_trainer import SSLTrainer
 from trainers.finetune_trainer import FineTuneTrainer
 
-
-def create_encoder(arch='resnet18', pretrained=False):
-    """Factory function for encoders"""
-    if arch == 'resnet18':
-        model = resnet18(pretrained=pretrained)
-    elif arch == 'resnet50':
-        model = resnet50(pretrained=pretrained)
-    elif arch == 'vit_small':
-        model = timm.create_model('vit_small_patch16_224', pretrained=pretrained)
-    else:
-        raise ValueError(f"Unknown architecture: {arch}")
-
-    return model
 
 
 def run_ssl_pretraining(args):
@@ -108,7 +94,7 @@ def run_finetuning(args, pretrained_path=None):
             config=vars(args)
         )
 
-    data_module = STL10DataModule(batch_size=64)
+    data_module = STL10DataModule(batch_size=args.batch_size)
     train_loader, test_loader = data_module.get_supervised_dataloaders()
 
     if pretrained_path:
@@ -116,9 +102,7 @@ def run_finetuning(args, pretrained_path=None):
         checkpoint = torch.load(pretrained_path)
         encoder = create_encoder(args.arch, pretrained=False)
 
-        if args.ssl_method in ['simclr', 'moco', 'byol']:
-            encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
-        elif args.ssl_method == 'mae':
+        if args.ssl_method in ['simclr', 'moco', 'byol', 'mae']:
             encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
     elif args.use_imagenet:
         print("Loading ImageNet pretrained encoder")
