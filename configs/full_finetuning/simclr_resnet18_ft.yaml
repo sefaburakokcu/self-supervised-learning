@@ -1,0 +1,20 @@
+# Full Fine-tuning: SimCLR pretrained ResNet-18
+name: simclr_resnet18_ft
+arch: resnet18
+ssl_method: simclr
+pretrained_method: simclr_resnet18
+mode: finetune
+finetune_epochs: 100
+batch_size: 64
+linear_probe: false
+
+optimizer: sgd
+optimizer_params:
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 1e-4
+
+scheduler: step
+scheduler_params:
+  step_size: 30
+  gamma: 0.1

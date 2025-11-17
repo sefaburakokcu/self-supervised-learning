@@ -1,0 +1,21 @@
+# MAE Pretraining with ViT-Small
+name: mae_vit_small
+arch: vit_small
+ssl_method: mae
+mode: pretrain
+epochs: 200
+batch_size: 128
+
+optimizer: adamw
+optimizer_params:
+  lr: 1.5e-4
+  weight_decay: 0.05
+
+scheduler: cosine
+scheduler_params:
+  T_max: 200
+  eta_min: 1e-6
+
+decoder_dim: 512
+decoder_depth: 4
+mask_ratio: 0.75

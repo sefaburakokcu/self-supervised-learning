@@ -1,0 +1,33 @@
+# Experiment groups for batch execution
+
+experiment_groups:
+  all_baselines:
+    - baselines/baseline_resnet18
+    - baselines/baseline_resnet50
+    - baselines/baseline_vit_small
+
+  all_ssl_pretrain:
+    - ssl_pretraining/simclr_resnet18
+    - ssl_pretraining/moco_resnet18
+    - ssl_pretraining/byol_resnet18
+    - ssl_pretraining/mae_vit_small
+
+  all_linear_probing:
+    - linear_probing/simclr_resnet18_lp
+    - linear_probing/byol_resnet18_lp
+    - linear_probing/mae_vit_small_lp
+
+  all_full_finetune:
+    - full_finetune/simclr_resnet18_ft
+    - full_finetune/byol_resnet18_ft
+    - full_finetune/mae_vit_small_ft
+
+  all_transfer_learning:
+    - transfer_learning/imagenet_resnet18
+    - transfer_learning/imagenet_resnet50
+
+  complete_pipeline:
+    - baselines/baseline_resnet18
+    - ssl_pretraining/simclr_resnet18
+    - linear_probing/simclr_resnet18_lp
+    - full_finetune/simclr_resnet18_ft

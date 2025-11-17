@@ -1,0 +1,20 @@
+# Baseline ResNet-50 from scratch
+name: baseline_resnet50
+arch: resnet50
+mode: finetune
+finetune_epochs: 100
+batch_size: 128
+
+optimizer: sgd
+optimizer_params:
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 1e-4
+
+scheduler: step
+scheduler_params:
+  step_size: 30
+  gamma: 0.1
+
+use_imagenet: false
+linear_probe: false

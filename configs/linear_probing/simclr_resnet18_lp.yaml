@@ -1,0 +1,20 @@
+# Linear Probing: SimCLR pretrained ResNet-18
+name: simclr_resnet18_lp
+arch: resnet18
+ssl_method: simclr
+pretrained_method: simclr_resnet18
+mode: finetune
+finetune_epochs: 100
+batch_size: 256
+linear_probe: true
+
+optimizer: sgd
+optimizer_params:
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0
+
+scheduler: step
+scheduler_params:
+  step_size: 50
+  gamma: 0.1

@@ -1,0 +1,19 @@
+# Transfer Learning: ImageNet pretrained ResNet-18
+name: imagenet_resnet18
+arch: resnet18
+mode: finetune
+finetune_epochs: 100
+batch_size: 64
+use_imagenet: true
+linear_probe: false
+
+optimizer: sgd
+optimizer_params:
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 1e-4
+
+scheduler: step
+scheduler_params:
+  step_size: 30
+  gamma: 0.1

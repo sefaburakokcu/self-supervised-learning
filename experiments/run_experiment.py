@@ -18,7 +18,8 @@ from models.ssl_methods.ssl_model_factory import SSLModelFactory
 from trainers.hyperparameters_factory import OptimizerFactory, SchedulerFactory
 from trainers.ssl_trainer import SSLTrainer
 from trainers.finetune_trainer import FineTuneTrainer
-from utils.config_manager import ConfigManager, create_argparse_from_config
+from utils.config_manager import ConfigManager
+
 
 
 class ExperimentRunner:
@@ -28,8 +29,9 @@ class ExperimentRunner:
         self.config = config
         self.device = torch.device(config.get('device', 'cuda'))
         self.use_wandb = config.get('use_wandb', False)
-        self.experiment_name = config.get('experiment_name', 'unnamed')
+        self.experiment_name = config.get('name', 'unnamed')
 
+        # Create directories
         self.checkpoint_dir = Path(config.get('checkpoint_dir', './checkpoints'))
         self.log_dir = Path(config.get('log_dir', './logs'))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -45,7 +47,7 @@ class ExperimentRunner:
         print(f"Config saved: {config_file}")
 
     def run_ssl_pretraining(self):
-        """Run SSL pretraining phase"""
+        """Run SSL pretraining"""
 
         print(f"\n{'=' * 80}")
         print(f"SSL Pretraining: {self.config['ssl_method']} + {self.config['arch']}")
@@ -59,7 +61,7 @@ class ExperimentRunner:
             )
 
         data_module = STL10DataModule(
-            batch_size=self.config['batch_size'],
+            batch_size=int(self.config['batch_size']),
             data_dir=self.config.get('data_dir', './data'),
             num_workers=self.config.get('num_workers', 4)
         )
@@ -89,22 +91,17 @@ class ExperimentRunner:
             self.config.get('optimizer_params', {})
         )
 
-        print(f"Optimizer: {self.config.get('optimizer', 'adamw')}")
-        print(f"  LR: {optimizer.param_groups[0]['lr']}")
-
-        scheduler_params = self.config.get('scheduler_params', {})
-        scheduler_params['T_max'] = self.config['epochs']  # Ensure T_max is set
+        scheduler_params = self.config.get('scheduler_params', {}).copy()
+        if 'T_max' not in scheduler_params:
+            scheduler_params['T_max'] = int(self.config['epochs'])
 
         scheduler = SchedulerFactory.create(
             self.config.get('scheduler', 'cosine'),
             optimizer,
-            scheduler_params,
-            epochs=self.config['epochs']
+            scheduler_params
         )
 
-        print(f"Scheduler: {self.config.get('scheduler', 'cosine')}")
-
-        experiment_dir = self.log_dir / self.experiment_name
+        experiment_dir = self.checkpoint_dir / self.experiment_name
         experiment_dir.mkdir(parents=True, exist_ok=True)
 
         trainer = SSLTrainer(
@@ -118,7 +115,7 @@ class ExperimentRunner:
 
         trainer.train(
             ssl_loader,
-            num_epochs=self.config['epochs'],
+            num_epochs=int(self.config['epochs']),
             save_freq=self.config.get('save_freq', 20)
         )
 
@@ -128,7 +125,7 @@ class ExperimentRunner:
         return str(experiment_dir / 'best_model.pth')
 
     def run_finetuning(self, pretrained_path=None):
-        """Run fine-tuning phase"""
+        """Run fine-tuning"""
 
         print(f"\n{'=' * 80}")
         print(f"Fine-tuning: {self.config['arch']}")
@@ -141,8 +138,9 @@ class ExperimentRunner:
                 config=self.config
             )
 
+        finetune_batch_size = int(self.config.get('batch_size', 64))
         data_module = STL10DataModule(
-            batch_size=self.config.get('finetune_batch_size', self.config['batch_size']),
+            batch_size=finetune_batch_size,
             data_dir=self.config.get('data_dir', './data'),
             num_workers=self.config.get('num_workers', 4)
         )
@@ -179,22 +177,21 @@ class ExperimentRunner:
             self.config.get('optimizer_params', {})
         )
 
-        print(f"Optimizer: {self.config.get('optimizer', 'sgd')}")
-        print(f"  LR: {optimizer.param_groups[0]['lr']}")
+        scheduler_params = self.config.get('scheduler_params', {}).copy()
+        if 'T_max' not in scheduler_params:
+            scheduler_params['T_max'] = int(self.config.get('finetune_epochs', 100))
 
         scheduler = SchedulerFactory.create(
             self.config.get('scheduler', 'step'),
             optimizer,
-            self.config.get('scheduler_params', {}),
-            epochs=self.config.get('finetune_epochs', 100)
+            scheduler_params
         )
 
-        print(f"Scheduler: {self.config.get('scheduler', 'step')}")
-
+        # Training
         best_acc = 0
         best_epoch = 0
 
-        for epoch in range(1, self.config.get('finetune_epochs', 100) + 1):
+        for epoch in range(1, int(self.config.get('finetune_epochs', 100)) + 1):
             train_loss, train_acc = trainer.train_epoch(train_loader, optimizer)
             test_metrics, _, _ = trainer.evaluate(test_loader)
 
@@ -220,13 +217,12 @@ class ExperimentRunner:
         print(f"\nBest Accuracy: {best_acc:.4f} (Epoch {best_epoch})")
 
         if self.use_wandb:
-            wandb.log({'best_accuracy': best_acc})
             wandb.finish()
 
         return best_acc
 
     def run(self):
-        """Execute full experiment"""
+        """Execute experiment"""
 
         print(f"Experiment: {self.experiment_name}")
         print(f"Mode: {self.config.get('mode', 'full')}")
@@ -240,7 +236,7 @@ class ExperimentRunner:
         if mode in ['finetune', 'full']:
             self.run_finetuning(pretrained_path)
 
-        print(f"\nExperiment complete: {self.experiment_name}")
+        print(f"\n✅ Experiment complete: {self.experiment_name}")
 
 
 def main():
@@ -250,7 +246,7 @@ def main():
         epilog='''
         Examples:
           # Run single experiment
-          python experiments/run_experiment.py --experiment simclr_resnet18
+          python experiments/run_experiment.py --experiment baselines/baseline_resnet18
         
           # Run experiment group
           python experiments/run_experiment.py --group all_baselines
@@ -258,62 +254,70 @@ def main():
           # List all experiments
           python experiments/run_experiment.py --list
         
-          # List all groups
-          python experiments/run_experiment.py --list-groups
+          # Show experiment details
+          python experiments/run_experiment.py --info baselines/baseline_resnet18
         '''
     )
 
     parser.add_argument('--experiment', type=str, help='Experiment name')
-    parser.add_argument('--group', type=str, help='Experiment group name')
-    parser.add_argument('--config', type=str, default='configs/experiments.yaml',
-                        help='Config file path')
+    parser.add_argument('--group', type=str, help='Experiment group')
     parser.add_argument('--list', action='store_true', help='List all experiments')
     parser.add_argument('--list-groups', action='store_true', help='List all groups')
-    parser.add_argument('--use-wandb', action='store_true', help='Enable W&B logging')
-    parser.add_argument('--device', type=str, default='cuda',
-                        help='Device (cuda or cpu)')
+    parser.add_argument('--info', type=str, help='Show experiment details')
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--device', type=str, default='cuda')
 
     args = parser.parse_args()
 
-    config_manager = ConfigManager(args.config)
+    config_manager = ConfigManager()
 
+    # List experiments
     if args.list:
-        print("\nAvailable Experiments:\n")
+        print("\n📋 Available Experiments:\n")
         for category, experiments in config_manager.list_experiments().items():
             print(f"{category}:")
-            for exp in experiments:
+            for exp in sorted(experiments):
                 print(f"  - {exp}")
         return
 
+    # List groups
     if args.list_groups:
-        print("\nAvailable Groups:\n")
+        print("\n📋 Available Groups:\n")
         for group in config_manager.list_groups():
             print(f"  - {group}")
         return
 
+    # Show experiment info
+    if args.info:
+        config_manager.print_experiment_info(args.info)
+        return
+
+    # Run experiment
     if args.experiment:
         exp_config = config_manager.get_experiment(args.experiment)
         exp_config['use_wandb'] = args.use_wandb
         exp_config['device'] = args.device
-        exp_config['experiment_name'] = args.experiment
 
         runner = ExperimentRunner(exp_config)
         runner.run()
 
+    # Run group
     elif args.group:
         experiments = config_manager.get_group(args.group)
-        print(f"\nRunning group: {args.group}")
-        print(f"   Experiments: {experiments}\n")
+        print(f"\n🚀 Running group: {args.group}")
+        print(f"   Experiments: {len(experiments)}\n")
 
         for exp_name in experiments:
-            exp_config = config_manager.get_experiment(exp_name)
-            exp_config['use_wandb'] = args.use_wandb
-            exp_config['device'] = args.device
-            exp_config['experiment_name'] = exp_name
+            try:
+                exp_config = config_manager.get_experiment(exp_name)
+                exp_config['use_wandb'] = args.use_wandb
+                exp_config['device'] = args.device
 
-            runner = ExperimentRunner(exp_config)
-            runner.run()
-            print()
+                runner = ExperimentRunner(exp_config)
+                runner.run()
+                print()
+            except Exception as e:
+                print(f"✗ Failed to run {exp_name}: {e}")
 
     else:
         parser.print_help()
