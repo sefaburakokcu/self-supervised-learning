@@ -1,7 +1,3 @@
-"""
-Main experiment runner with parametric configuration
-"""
-
 import torch
 import wandb
 import argparse
@@ -21,9 +17,8 @@ from trainers.finetune_trainer import FineTuneTrainer
 from utils.config_manager import ConfigManager
 
 
-
 class ExperimentRunner:
-    """Main experiment runner"""
+    """Simple experiment runner for single experiments"""
 
     def __init__(self, config: dict):
         self.config = config
@@ -31,7 +26,6 @@ class ExperimentRunner:
         self.use_wandb = config.get('use_wandb', False)
         self.experiment_name = config.get('name', 'unnamed')
 
-        # Create directories
         self.checkpoint_dir = Path(config.get('checkpoint_dir', './checkpoints'))
         self.log_dir = Path(config.get('log_dir', './logs'))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -41,33 +35,33 @@ class ExperimentRunner:
 
     def _save_config(self):
         """Save experiment configuration"""
-        config_file = self.log_dir / f'{self.experiment_name}_config.json'
+        config_dir = self.log_dir / self.experiment_name
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_file = config_dir / 'config.json'
         with open(config_file, 'w') as f:
             json.dump(self.config, f, indent=2)
         print(f"Config saved: {config_file}")
 
     def run_ssl_pretraining(self):
-        """Run SSL pretraining"""
+        """Run SimCLR SSL pretraining"""
 
         print(f"\n{'=' * 80}")
-        print(f"SSL Pretraining: {self.config['ssl_method']} + {self.config['arch']}")
+        print(f"SSL Pretraining: SimCLR + {self.config['arch']}")
         print(f"{'=' * 80}\n")
 
         if self.use_wandb:
             wandb.init(
-                project=self.config.get('wandb_project', 'stl10-ssl'),
+                project='stl10-ssl',
                 name=f"{self.experiment_name}_pretrain",
                 config=self.config
             )
 
         data_module = STL10DataModule(
             batch_size=int(self.config['batch_size']),
-            data_dir=self.config.get('data_dir', './data'),
+            data_dir=self.config.get('data_dir', './datasets'),
             num_workers=self.config.get('num_workers', 4)
         )
-        ssl_loader = data_module.get_ssl_dataloaders(
-            ssl_method=self.config['ssl_method']
-        )
+        ssl_loader = data_module.get_ssl_dataloaders(ssl_method='simclr')
 
         encoder = create_encoder(self.config['arch'], pretrained=False)
 
@@ -133,7 +127,7 @@ class ExperimentRunner:
 
         if self.use_wandb:
             wandb.init(
-                project=self.config.get('wandb_project', 'stl10-ssl'),
+                project='stl10-ssl',
                 name=f"{self.experiment_name}_finetune",
                 config=self.config
             )
@@ -141,7 +135,7 @@ class ExperimentRunner:
         finetune_batch_size = int(self.config.get('batch_size', 64))
         data_module = STL10DataModule(
             batch_size=finetune_batch_size,
-            data_dir=self.config.get('data_dir', './data'),
+            data_dir=self.config.get('data_dir', './datasets'),
             num_workers=self.config.get('num_workers', 4)
         )
         train_loader, test_loader = data_module.get_supervised_dataloaders()
@@ -187,7 +181,6 @@ class ExperimentRunner:
             scheduler_params
         )
 
-        # Training
         best_acc = 0
         best_epoch = 0
 
@@ -217,6 +210,7 @@ class ExperimentRunner:
         print(f"\nBest Accuracy: {best_acc:.4f} (Epoch {best_epoch})")
 
         if self.use_wandb:
+            wandb.log({'best_accuracy': best_acc})
             wandb.finish()
 
         return best_acc
@@ -236,88 +230,75 @@ class ExperimentRunner:
         if mode in ['finetune', 'full']:
             self.run_finetuning(pretrained_path)
 
-        print(f"\n✅ Experiment complete: {self.experiment_name}")
+        print(f"\nExperiment complete: {self.experiment_name}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='STL-10 SSL Experiment Runner',
+        description='STL-10 SSL Experiment Runner (Single Experiment Only)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
         Examples:
-          # Run single experiment
+          Baseline experiments:
           python experiments/run_experiment.py --experiment baselines/baseline_resnet18
+          python experiments/run_experiment.py --experiment baselines/baseline_resnet50
+          python experiments/run_experiment.py --experiment baselines/baseline_vit_small
         
-          # Run experiment group
-          python experiments/run_experiment.py --group all_baselines
+          SimCLR pretraining:
+          python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18
         
-          # List all experiments
+          Linear probing:
+          python experiments/run_experiment.py --experiment linear_probing/simclr_resnet18_lp
+        
+          Full fine-tuning:
+          python experiments/run_experiment.py --experiment full_finetune/simclr_resnet18_ft
+        
+          Transfer learning (ImageNet):
+          python experiments/run_experiment.py --experiment transfer_learning/imagenet_resnet18
+          python experiments/run_experiment.py --experiment transfer_learning/imagenet_resnet50
+        
+          Other:
           python experiments/run_experiment.py --list
-        
-          # Show experiment details
           python experiments/run_experiment.py --info baselines/baseline_resnet18
+          python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18 --use-wandb
         '''
     )
 
-    parser.add_argument('--experiment', type=str, help='Experiment name')
-    parser.add_argument('--group', type=str, help='Experiment group')
-    parser.add_argument('--list', action='store_true', help='List all experiments')
-    parser.add_argument('--list-groups', action='store_true', help='List all groups')
+    parser.add_argument('--experiment', type=str, help='Experiment path (e.g., baselines/baseline_resnet18)')
+    parser.add_argument('--list', action='store_true', help='List all available experiments')
     parser.add_argument('--info', type=str, help='Show experiment details')
-    parser.add_argument('--use-wandb', action='store_true')
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--use-wandb', action='store_true', help='Enable W&B logging')
+    parser.add_argument('--device', type=str, default='cuda', help='Device (cuda or cpu)')
 
     args = parser.parse_args()
 
     config_manager = ConfigManager()
 
-    # List experiments
     if args.list:
-        print("\n📋 Available Experiments:\n")
-        for category, experiments in config_manager.list_experiments().items():
-            print(f"{category}:")
-            for exp in sorted(experiments):
-                print(f"  - {exp}")
+        config_manager.print_available_experiments()
         return
 
-    # List groups
-    if args.list_groups:
-        print("\n📋 Available Groups:\n")
-        for group in config_manager.list_groups():
-            print(f"  - {group}")
-        return
-
-    # Show experiment info
     if args.info:
         config_manager.print_experiment_info(args.info)
         return
 
-    # Run experiment
     if args.experiment:
-        exp_config = config_manager.get_experiment(args.experiment)
-        exp_config['use_wandb'] = args.use_wandb
-        exp_config['device'] = args.device
+        try:
+            exp_config = config_manager.get_experiment(args.experiment)
+            exp_config['use_wandb'] = args.use_wandb
+            exp_config['device'] = args.device
 
-        runner = ExperimentRunner(exp_config)
-        runner.run()
+            runner = ExperimentRunner(exp_config)
+            runner.run()
 
-    # Run group
-    elif args.group:
-        experiments = config_manager.get_group(args.group)
-        print(f"\n🚀 Running group: {args.group}")
-        print(f"   Experiments: {len(experiments)}\n")
-
-        for exp_name in experiments:
-            try:
-                exp_config = config_manager.get_experiment(exp_name)
-                exp_config['use_wandb'] = args.use_wandb
-                exp_config['device'] = args.device
-
-                runner = ExperimentRunner(exp_config)
-                runner.run()
-                print()
-            except Exception as e:
-                print(f"✗ Failed to run {exp_name}: {e}")
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     else:
         parser.print_help()
