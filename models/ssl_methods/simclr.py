@@ -39,23 +39,49 @@ class SimCLR(nn.Module):
         return loss
 
     def nt_xent_loss(self, z1, z2):
-        """Normalized Temperature-scaled Cross Entropy Loss"""
-        batch_size = z1.shape[0]
+        """
+        Numerically optimized NT-Xent loss (SimCLR).
+        Uses explicit log-sum-exp stabilization.
 
+        z1, z2: [B, D] L2-normalized embeddings
+        Returns: scalar loss
+        """
+
+        device = z1.device
+        B = z1.size(0)
+        N = 2 * B
+
+        # ------------------------------------------------------------
+        # 1. Combine embeddings into [2B, D]
+        # ------------------------------------------------------------
         z = torch.cat([z1, z2], dim=0)  # [2B, D]
 
-        sim_matrix = torch.mm(z, z.T) / self.temperature  # [2B, 2B]
+        # ------------------------------------------------------------
+        # 2. Pairwise similarity matrix (cosine since z normalized)
+        # ------------------------------------------------------------
+        sim = torch.matmul(z, z.T) / self.temperature  # [2B, 2B]
 
-        mask = torch.eye(2 * batch_size, dtype=torch.bool, device=z.device)
-        sim_matrix = sim_matrix.masked_fill(mask, -9e15)
+        # Mask diagonal (self-similarity)
+        mask = torch.eye(N, dtype=torch.bool, device=device)
+        sim = sim.masked_fill(mask, -1e9)  # large negative constant → stable softmax ignore
 
-        pos_sim = torch.exp(torch.cat([
-            torch.diag(sim_matrix, batch_size),
-            torch.diag(sim_matrix, -batch_size)
-        ]))
+        # ------------------------------------------------------------
+        # 3. Identify positives (correct matching index)
+        #    For each i, positive = i + B (mod 2B)
+        # ------------------------------------------------------------
+        pos_index = (torch.arange(N, device=device) + B) % N
 
-        all_sim = torch.exp(sim_matrix).sum(dim=1)
+        # Extract positive logit for each i
+        pos_logits = sim[torch.arange(N, device=device), pos_index]  # [2B]
 
-        loss = -torch.log(pos_sim / all_sim).mean()
+        # ------------------------------------------------------------
+        # 4. Compute logsumexp for each row (denominator)
+        #    log( sum_k exp(sim[i,k]) )
+        # ------------------------------------------------------------
+        denom_logsumexp = torch.logsumexp(sim, dim=1)  # [2B]
 
-        return loss
+        # ------------------------------------------------------------
+        # 5. Final NT-Xent loss: -log( exp(pos) / sum exp(all) )
+        # ------------------------------------------------------------
+        loss = - (pos_logits - denom_logsumexp)
+        return loss.mean()
