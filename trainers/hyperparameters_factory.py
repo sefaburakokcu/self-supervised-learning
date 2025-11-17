@@ -15,7 +15,6 @@ class OptimizerFactory:
             return optim.Adam(params, **optimizer_params)
 
         elif optimizer_name.lower() == 'adamw':
-            print(optimizer_params)
             return optim.AdamW(params, **optimizer_params)
 
         elif optimizer_name.lower() == 'rmsprop':

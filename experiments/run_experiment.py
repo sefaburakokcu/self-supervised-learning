@@ -3,7 +3,7 @@ import wandb
 import argparse
 import sys
 import json
-
+import logging
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,6 +15,36 @@ from trainers.hyperparameters_factory import OptimizerFactory, SchedulerFactory
 from trainers.ssl_trainer import SSLTrainer
 from trainers.finetune_trainer import FineTuneTrainer
 from utils.config_manager import ConfigManager
+
+
+def setup_logger(name: str, log_dir: Path) -> logging.Logger:
+    """Setup logger with file and console handlers"""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(name)
+
+    if logger.handlers:
+        return logger
+
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    file_handler = logging.FileHandler(log_dir / f'{name}.log', mode='w')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    file_handler.flush()
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
 
 
 class ExperimentRunner:
@@ -31,206 +61,261 @@ class ExperimentRunner:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
+        self.logger = setup_logger(self.experiment_name, self.log_dir)
+        self.logger.info(f"Initialized ExperimentRunner: {self.experiment_name}")
+        self.logger.info(f"Device: {self.device}, Use W&B: {self.use_wandb}")
+
         self._save_config()
 
     def _save_config(self):
         """Save experiment configuration"""
-        config_dir = self.log_dir / self.experiment_name
+        config_dir = self.checkpoint_dir / self.experiment_name
         config_dir.mkdir(parents=True, exist_ok=True)
         config_file = config_dir / 'config.json'
+
         with open(config_file, 'w') as f:
             json.dump(self.config, f, indent=2)
-        print(f"Config saved: {config_file}")
+
+        self.logger.info(f"Config saved: {config_file}")
 
     def run_ssl_pretraining(self):
         """Run SimCLR SSL pretraining"""
-
-        print(f"\n{'=' * 80}")
-        print(f"SSL Pretraining: SimCLR + {self.config['arch']}")
-        print(f"{'=' * 80}\n")
+        self.logger.info("=" * 80)
+        self.logger.info(f"SSL Pretraining: SimCLR + {self.config['arch']}")
+        self.logger.info("=" * 80)
 
         if self.use_wandb:
+            self.logger.info("Initializing W&B")
             wandb.init(
                 project='stl10-ssl',
                 name=f"{self.experiment_name}_pretrain",
                 config=self.config
             )
 
-        data_module = STL10DataModule(
-            batch_size=int(self.config['batch_size']),
-            data_dir=self.config.get('data_dir', './datasets'),
-            num_workers=self.config.get('num_workers', 4)
-        )
-        ssl_loader = data_module.get_ssl_dataloaders(ssl_method='simclr')
+        try:
+            self.logger.info(f"Loading STL10 dataset, batch_size={self.config['batch_size']}")
+            data_module = STL10DataModule(
+                batch_size=int(self.config['batch_size']),
+                data_dir=self.config.get('data_dir', './datasets'),
+                num_workers=self.config.get('num_workers', 4)
+            )
+            ssl_loader = data_module.get_ssl_dataloaders(ssl_method='simclr')
+            self.logger.info(f"SSL data loader created")
 
-        encoder = create_encoder(self.config['arch'], pretrained=False)
+            self.logger.info(f"Creating encoder: {self.config['arch']}")
+            encoder = create_encoder(self.config['arch'], pretrained=False)
 
-        ssl_kwargs = {}
-        for key in ['projection_dim', 'hidden_dim', 'temperature', 'momentum',
-                    'decoder_dim', 'decoder_depth', 'mask_ratio']:
-            if key in self.config:
-                ssl_kwargs[key] = self.config[key]
+            ssl_kwargs = {}
+            for key in ['projection_dim', 'hidden_dim', 'temperature', 'momentum',
+                        'decoder_dim', 'decoder_depth', 'mask_ratio']:
+                if key in self.config:
+                    ssl_kwargs[key] = self.config[key]
+                    self.logger.debug(f"SSL param {key}={self.config[key]}")
 
-        model = SSLModelFactory.create(
-            self.config['ssl_method'],
-            encoder,
-            **ssl_kwargs
-        )
+            self.logger.info(f"Creating SSL model: {self.config['ssl_method']}")
+            model = SSLModelFactory.create(
+                self.config['ssl_method'],
+                encoder,
+                **ssl_kwargs
+            )
 
-        print(f"Model: {sum(p.numel() for p in model.parameters()):,} parameters")
+            param_count = sum(p.numel() for p in model.parameters())
+            self.logger.info(f"Model parameters: {param_count:,}")
 
-        optimizer = OptimizerFactory.create(
-            self.config.get('optimizer', 'adamw'),
-            model.parameters(),
-            self.config.get('optimizer_params', {})
-        )
+            self.logger.info(f"Creating optimizer: {self.config.get('optimizer', 'adamw')}")
+            optimizer = OptimizerFactory.create(
+                self.config.get('optimizer', 'adamw'),
+                model.parameters(),
+                self.config.get('optimizer_params', {})
+            )
 
-        scheduler_params = self.config.get('scheduler_params', {}).copy()
-        if 'T_max' not in scheduler_params:
-            scheduler_params['T_max'] = int(self.config['epochs'])
+            scheduler_params = self.config.get('scheduler_params', {}).copy()
+            if 'T_max' not in scheduler_params:
+                scheduler_params['T_max'] = int(self.config['epochs'])
 
-        scheduler = SchedulerFactory.create(
-            self.config.get('scheduler', 'cosine'),
-            optimizer,
-            scheduler_params
-        )
+            self.logger.info(f"Creating scheduler: {self.config.get('scheduler', 'cosine')}")
+            scheduler = SchedulerFactory.create(
+                self.config.get('scheduler', 'cosine'),
+                optimizer,
+                scheduler_params
+            )
 
-        experiment_dir = self.checkpoint_dir / self.experiment_name
-        experiment_dir.mkdir(parents=True, exist_ok=True)
+            experiment_dir = self.checkpoint_dir / self.experiment_name
+            experiment_dir.mkdir(parents=True, exist_ok=True)
 
-        trainer = SSLTrainer(
-            model=model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            device=self.device,
-            log_dir=str(experiment_dir),
-            use_wandb=self.use_wandb
-        )
+            self.logger.info(f"Starting SSL training for {self.config['epochs']} epochs")
+            trainer = SSLTrainer(
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                device=self.device,
+                log_dir=str(experiment_dir),
+                use_wandb=self.use_wandb,
+                logger=self.logger
+            )
 
-        trainer.train(
-            ssl_loader,
-            num_epochs=int(self.config['epochs']),
-            save_freq=self.config.get('save_freq', 20)
-        )
+            trainer.train(
+                ssl_loader,
+                num_epochs=int(self.config['epochs']),
+                save_freq=self.config.get('save_freq', 20)
+            )
 
-        if self.use_wandb:
-            wandb.finish()
+            best_model_path = str(experiment_dir / 'best_model.pth')
+            self.logger.info(f"SSL pretraining completed. Best model: {best_model_path}")
 
-        return str(experiment_dir / 'best_model.pth')
+            if self.use_wandb:
+                wandb.finish()
+
+            return best_model_path
+
+        except Exception as e:
+            self.logger.error(f"SSL pretraining failed: {e}", exc_info=True)
+            if self.use_wandb:
+                wandb.finish()
+            raise
 
     def run_finetuning(self, pretrained_path=None):
         """Run fine-tuning"""
-
-        print(f"\n{'=' * 80}")
-        print(f"Fine-tuning: {self.config['arch']}")
-        print(f"{'=' * 80}\n")
+        self.logger.info("=" * 80)
+        self.logger.info(f"Fine-tuning: {self.config['arch']}")
+        self.logger.info("=" * 80)
 
         if self.use_wandb:
+            self.logger.info("Initializing W&B for fine-tuning")
             wandb.init(
                 project='stl10-ssl',
                 name=f"{self.experiment_name}_finetune",
                 config=self.config
             )
 
-        finetune_batch_size = int(self.config.get('batch_size', 64))
-        data_module = STL10DataModule(
-            batch_size=finetune_batch_size,
-            data_dir=self.config.get('data_dir', './datasets'),
-            num_workers=self.config.get('num_workers', 4)
-        )
-        train_loader, test_loader = data_module.get_supervised_dataloaders()
+        try:
+            finetune_batch_size = int(self.config.get('batch_size', 64))
+            self.logger.info(f"Loading supervised data, batch_size={finetune_batch_size}")
+            data_module = STL10DataModule(
+                batch_size=finetune_batch_size,
+                data_dir=self.config.get('data_dir', './datasets'),
+                num_workers=self.config.get('num_workers', 4)
+            )
+            train_loader, test_loader = data_module.get_supervised_dataloaders()
+            self.logger.info("Supervised data loaders created")
 
-        if pretrained_path:
-            print(f"Loading pretrained: {pretrained_path}")
-            checkpoint = torch.load(pretrained_path, map_location=self.device)
-            encoder = create_encoder(self.config['arch'], pretrained=False)
-            encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
+            if pretrained_path:
+                self.logger.info(f"Loading pretrained weights from {pretrained_path}")
+                checkpoint = torch.load(pretrained_path, map_location=self.device)
+                encoder = create_encoder(self.config['arch'], pretrained=False)
+                encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                self.logger.info("Pretrained weights loaded successfully")
 
-        elif self.config.get('use_imagenet', False):
-            print("Loading ImageNet pretrained")
-            encoder = create_encoder(self.config['arch'], pretrained=True)
+            elif self.config.get('use_imagenet', False):
+                self.logger.info("Using ImageNet pretrained weights")
+                encoder = create_encoder(self.config['arch'], pretrained=True)
 
-        else:
-            print("Training from scratch")
-            encoder = create_encoder(self.config['arch'], pretrained=False)
+            else:
+                self.logger.info("Training from scratch (no pretrained weights)")
+                encoder = create_encoder(self.config['arch'], pretrained=False)
 
-        trainer = FineTuneTrainer(
-            encoder=encoder,
-            num_classes=10,
-            freeze_encoder=self.config.get('linear_probe', False),
-            device=self.device
-        )
+            linear_probe = self.config.get('linear_probe', False)
+            self.logger.info(f"Creating fine-tuner, linear_probe={linear_probe}")
+            trainer = FineTuneTrainer(
+                encoder=encoder,
+                num_classes=10,
+                freeze_encoder=linear_probe,
+                device=self.device,
+                logger=self.logger
+            )
 
-        params = list(trainer.classifier.parameters())
-        if not self.config.get('linear_probe', False):
-            params += list(trainer.encoder.parameters())
+            params = list(trainer.classifier.parameters())
+            if not linear_probe:
+                params += list(trainer.encoder.parameters())
 
-        optimizer = OptimizerFactory.create(
-            self.config.get('optimizer', 'sgd'),
-            params,
-            self.config.get('optimizer_params', {})
-        )
+            trainable_params = sum(p.numel() for p in params)
+            self.logger.info(f"Trainable parameters: {trainable_params:,}")
 
-        scheduler_params = self.config.get('scheduler_params', {}).copy()
-        if 'T_max' not in scheduler_params:
-            scheduler_params['T_max'] = int(self.config.get('finetune_epochs', 100))
+            self.logger.info(f"Creating optimizer: {self.config.get('optimizer', 'sgd')}")
+            optimizer = OptimizerFactory.create(
+                self.config.get('optimizer', 'sgd'),
+                params,
+                self.config.get('optimizer_params', {})
+            )
 
-        scheduler = SchedulerFactory.create(
-            self.config.get('scheduler', 'step'),
-            optimizer,
-            scheduler_params
-        )
+            scheduler_params = self.config.get('scheduler_params', {}).copy()
+            if 'T_max' not in scheduler_params:
+                scheduler_params['T_max'] = int(self.config.get('finetune_epochs', 100))
 
-        best_acc = 0
-        best_epoch = 0
+            self.logger.info(f"Creating scheduler: {self.config.get('scheduler', 'step')}")
+            scheduler = SchedulerFactory.create(
+                self.config.get('scheduler', 'step'),
+                optimizer,
+                scheduler_params
+            )
 
-        for epoch in range(1, int(self.config.get('finetune_epochs', 100)) + 1):
-            train_loss, train_acc = trainer.train_epoch(train_loader, optimizer)
-            test_metrics, _, _ = trainer.evaluate(test_loader)
+            best_acc = 0
+            best_epoch = 0
+            finetune_epochs = int(self.config.get('finetune_epochs', 100))
+            self.logger.info(f"Starting fine-tuning for {finetune_epochs} epochs")
 
-            scheduler.step()
+            for epoch in range(1, finetune_epochs + 1):
+                train_loss, train_acc = trainer.train_epoch(train_loader, optimizer)
+                test_metrics, _, _ = trainer.evaluate(test_loader)
+                scheduler.step()
 
-            print(f"\nEpoch {epoch}/{self.config.get('finetune_epochs', 100)}")
-            print(f"  Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
-            print(f"  Test Acc: {test_metrics['accuracy']:.4f} | F1: {test_metrics['f1_macro']:.4f}")
+                test_acc = test_metrics['accuracy']
+                test_f1 = test_metrics['f1_macro']
+
+                if test_acc > best_acc:
+                    best_acc = test_acc
+                    best_epoch = epoch
+                    self.logger.info(
+                        f"Epoch {epoch}/{finetune_epochs} | train_loss={train_loss:.4f} | train_acc={train_acc:.4f} | test_acc={test_acc:.4f} | f1={test_f1:.4f} [NEW BEST]")
+                else:
+                    self.logger.info(
+                        f"Epoch {epoch}/{finetune_epochs} | train_loss={train_loss:.4f} | train_acc={train_acc:.4f} | test_acc={test_acc:.4f} | f1={test_f1:.4f}")
+
+                if self.use_wandb:
+                    wandb.log({
+                        'epoch': epoch,
+                        'train_loss': train_loss,
+                        'train_acc': train_acc,
+                        'test_acc': test_acc,
+                        'test_f1': test_f1
+                    })
+
+            self.logger.info(f"Fine-tuning complete. Best Accuracy: {best_acc:.4f} at Epoch {best_epoch}")
 
             if self.use_wandb:
-                wandb.log({
-                    'epoch': epoch,
-                    'train_loss': train_loss,
-                    'train_acc': train_acc,
-                    'test_acc': test_metrics['accuracy'],
-                    'test_f1': test_metrics['f1_macro']
-                })
+                wandb.log({'best_accuracy': best_acc})
+                wandb.finish()
 
-            if test_metrics['accuracy'] > best_acc:
-                best_acc = test_metrics['accuracy']
-                best_epoch = epoch
+            return best_acc
 
-        print(f"\nBest Accuracy: {best_acc:.4f} (Epoch {best_epoch})")
-
-        if self.use_wandb:
-            wandb.log({'best_accuracy': best_acc})
-            wandb.finish()
-
-        return best_acc
+        except Exception as e:
+            self.logger.error(f"Fine-tuning failed: {e}", exc_info=True)
+            if self.use_wandb:
+                wandb.finish()
+            raise
 
     def run(self):
         """Execute experiment"""
-
-        print(f"Experiment: {self.experiment_name}")
-        print(f"Mode: {self.config.get('mode', 'full')}")
+        self.logger.info(f"Starting experiment: {self.experiment_name}")
+        self.logger.info(f"Mode: {self.config.get('mode', 'full')}")
 
         mode = self.config.get('mode', 'full')
         pretrained_path = None
 
-        if mode in ['pretrain', 'full']:
-            pretrained_path = self.run_ssl_pretraining()
+        try:
+            if mode in ['pretrain', 'full']:
+                self.logger.info("Executing pretraining phase")
+                pretrained_path = self.run_ssl_pretraining()
 
-        if mode in ['finetune', 'full']:
-            self.run_finetuning(pretrained_path)
+            if mode in ['finetune', 'full']:
+                self.logger.info("Executing fine-tuning phase")
+                self.run_finetuning(pretrained_path)
 
-        print(f"\nExperiment complete: {self.experiment_name}")
+            self.logger.info(f"Experiment completed successfully: {self.experiment_name}")
+
+        except Exception as e:
+            self.logger.error(f"Experiment failed: {e}", exc_info=True)
+            raise
 
 
 def main():
@@ -243,20 +328,20 @@ def main():
           python experiments/run_experiment.py --experiment baselines/baseline_resnet18
           python experiments/run_experiment.py --experiment baselines/baseline_resnet50
           python experiments/run_experiment.py --experiment baselines/baseline_vit_small
-        
+
           SimCLR pretraining:
           python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18
-        
+
           Linear probing:
           python experiments/run_experiment.py --experiment linear_probing/simclr_resnet18_lp
-        
+
           Full fine-tuning:
           python experiments/run_experiment.py --experiment full_finetune/simclr_resnet18_ft
-        
+
           Transfer learning (ImageNet):
           python experiments/run_experiment.py --experiment transfer_learning/imagenet_resnet18
           python experiments/run_experiment.py --experiment transfer_learning/imagenet_resnet50
-        
+
           Other:
           python experiments/run_experiment.py --list
           python experiments/run_experiment.py --info baselines/baseline_resnet18
@@ -284,6 +369,9 @@ def main():
 
     if args.experiment:
         try:
+            logger = setup_logger('main', Path('./logs'))
+            logger.info(f"Experiment requested: {args.experiment}")
+
             exp_config = config_manager.get_experiment(args.experiment)
             exp_config['use_wandb'] = args.use_wandb
             exp_config['device'] = args.device
@@ -291,13 +379,13 @@ def main():
             runner = ExperimentRunner(exp_config)
             runner.run()
 
+            logger.info("Main execution completed successfully")
+
         except FileNotFoundError as e:
-            print(f"Error: {e}")
+            logger.error(f"Config not found: {e}", exc_info=True)
             sys.exit(1)
         except Exception as e:
-            print(f"Error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Execution failed: {e}", exc_info=True)
             sys.exit(1)
 
     else:
