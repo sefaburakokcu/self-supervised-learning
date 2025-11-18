@@ -1,31 +1,97 @@
-# Self Supervised Learning
+# Self-Supervised Learning Framework
 
-This repository contains implementations and experiments related to self-supervised learning methods for computer vision. 
-It includes pretext tasks, architectures, and evaluation protocols. It also provides 
-fine-tuning and linear probing experiments on STL-10 dataset.
+This repository provides a pipeline for training and evaluating self-supervised learning models on the STL-10 dataset.
+The framework supports pretraining, linear probing, and fine-tuning workflows.
 
-## Experiments
+## Features
 
-### List all experiments
+* SimCLR self-supervised pretraining
+* ResNet and Vision Transformer backbones
+* Evaluation on STL-10 using accuracy and F1-score
+* Notebook support for easy experimentation
+* Unified JSON-based experiment configuration system
+
+## Requirements
+
+* Python 3.10+
+* PyTorch 2.5.1
+* CUDA 12.4 (recommended)
+* GPU with at least 8 GB memory
+
+See `requirements.txt` for all dependencies.
+
+## Quick Start
+
+### Installation
+
+```bash
+git clone https://github.com/sefaburakokcu/self-supervised-learning.git
+cd self-supervised-learning
+pip install -r requirements.txt
+```
+
+### Running Experiments
+
+List experiments:
+
+```bash
 python experiments/run_experiment.py --list
+```
 
-### List all groups
-python experiments/run_experiment.py --list-groups
+Run an experiment:
 
-### Run single experiment
-python experiments/run_experiment.py --experiment simclr_resnet18 --use-wandb
+```bash
+python experiments/run_experiment.py --experiment baselines/baseline_resnet18 --device cuda
+```
 
-### Run experiment group (all baselines)
-python experiments/run_experiment.py --group all_baselines --use-wandb
+SimCLR pretraining:
 
-### Run complete pipeline
-python experiments/run_experiment.py --group complete_pipeline --use-wandb
+```bash
+python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18
+```
 
-### Run specific experiment with custom device
-python experiments/run_experiment.py --experiment mae_vit_small --device cuda --use-wandb
+### Experiment Types
 
-### Run linear probing experiments
-python experiments/run_experiment.py --group all_linear_probing
+* Baselines (supervised training)
+* SSL pretraining (SimCLR)
+* Linear probing
+* Full fine-tuning
+* Transfer learning (ImageNet initialization)
 
-### Run all fine-tuning experiments
-python experiments/run_experiment.py --group all_full_finetune
+## Jupyter Notebook
+
+`notebooks/experiments.ipynb` supports Colab execution, automated setup, GPU training, logging, and Google Drive backups.
+
+## Directory Structure
+
+```
+self-supervised-learning/
+├── experiments/
+│   └── run_experiment.py
+├── models/
+├── data/
+├── trainers/
+├── utils/
+├── configs/
+├── data/
+├── evaluators/
+├── experiments/
+├── notebooks/
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
+## Configuration
+
+Experiment files in `configs/` define model architecture, optimizer settings, training parameters, and SimCLR-specific options.
+
+## Monitoring and Outputs
+
+Training logs and checkpoints are stored under `./logs/` and `./checkpoints/`.
+Each experiment generates:
+
+* Model checkpoints
+* Training logs
+* Configuration snapshots
+* Final accuracy and F1-score
