@@ -157,7 +157,7 @@ class ExperimentRunner:
             trainer.train(
                 ssl_loader,
                 num_epochs=int(self.config['epochs']),
-                save_freq=self.config.get('save_freq', 20)
+                save_freq=self.config.get('save_freq', 10)
             )
 
             best_model_path = str(experiment_dir / 'best_model.pth')
@@ -191,6 +191,7 @@ class ExperimentRunner:
         try:
             finetune_batch_size = int(self.config.get('batch_size', 64))
             self.logger.info(f"Loading supervised data, batch_size={finetune_batch_size}")
+
             data_module = STL10DataModule(
                 batch_size=finetune_batch_size,
                 data_dir=self.config.get('data_dir', './datasets'),
@@ -202,6 +203,7 @@ class ExperimentRunner:
             if pretrained_path:
                 self.logger.info(f"Loading pretrained weights from {pretrained_path}")
                 checkpoint = torch.load(pretrained_path, map_location=self.device)
+
                 encoder = create_encoder(self.config['arch'], pretrained=False)
                 encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
                 self.logger.info("Pretrained weights loaded successfully")
@@ -216,12 +218,18 @@ class ExperimentRunner:
 
             linear_probe = self.config.get('linear_probe', False)
             self.logger.info(f"Creating fine-tuner, linear_probe={linear_probe}")
+
+            experiment_dir = self.checkpoint_dir / self.experiment_name
+            experiment_dir.mkdir(parents=True, exist_ok=True)
+
             trainer = FineTuneTrainer(
                 encoder=encoder,
                 num_classes=10,
                 freeze_encoder=linear_probe,
                 device=self.device,
-                logger=self.logger
+                logger=self.logger,
+                log_dir=str(experiment_dir),
+                use_wandb=self.use_wandb
             )
 
             params = list(trainer.classifier.parameters())
@@ -239,8 +247,9 @@ class ExperimentRunner:
             )
 
             scheduler_params = self.config.get('scheduler_params', {}).copy()
-            if 'T_max' not in scheduler_params:
-                scheduler_params['T_max'] = int(self.config.get('finetune_epochs', 100))
+            if self.config.get('scheduler', 'step') in ['cosine', 'warmup_cosine']:
+                if 'T_max' not in scheduler_params:
+                    scheduler_params['T_max'] = int(self.config.get('finetune_epochs', 100))
 
             self.logger.info(f"Creating scheduler: {self.config.get('scheduler', 'step')}")
             scheduler = SchedulerFactory.create(
@@ -249,38 +258,20 @@ class ExperimentRunner:
                 scheduler_params
             )
 
-            best_acc = 0
-            best_epoch = 0
             finetune_epochs = int(self.config.get('finetune_epochs', 100))
             self.logger.info(f"Starting fine-tuning for {finetune_epochs} epochs")
 
-            for epoch in range(1, finetune_epochs + 1):
-                train_loss, train_acc = trainer.train_epoch(train_loader, optimizer)
-                test_metrics, _, _ = trainer.evaluate(test_loader)
-                scheduler.step()
+            trainer.train(
+                train_loader=train_loader,
+                val_loader=test_loader,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                num_epochs=finetune_epochs,
+                save_freq=self.config.get('save_freq', 10)
+            )
 
-                test_acc = test_metrics['accuracy']
-                test_f1 = test_metrics['f1_macro']
-
-                if test_acc > best_acc:
-                    best_acc = test_acc
-                    best_epoch = epoch
-                    self.logger.info(
-                        f"Epoch {epoch}/{finetune_epochs} | train_loss={train_loss:.4f} | train_acc={train_acc:.4f} | test_acc={test_acc:.4f} | f1={test_f1:.4f} [NEW BEST]")
-                else:
-                    self.logger.info(
-                        f"Epoch {epoch}/{finetune_epochs} | train_loss={train_loss:.4f} | train_acc={train_acc:.4f} | test_acc={test_acc:.4f} | f1={test_f1:.4f}")
-
-                if self.use_wandb:
-                    wandb.log({
-                        'epoch': epoch,
-                        'train_loss': train_loss,
-                        'train_acc': train_acc,
-                        'test_acc': test_acc,
-                        'test_f1': test_f1
-                    })
-
-            self.logger.info(f"Fine-tuning complete. Best Accuracy: {best_acc:.4f} at Epoch {best_epoch}")
+            best_acc = trainer.best_acc
+            self.logger.info(f"Fine-tuning complete. Best Accuracy: {best_acc:.4f}")
 
             if self.use_wandb:
                 wandb.log({'best_accuracy': best_acc})
