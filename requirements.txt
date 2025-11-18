@@ -1,0 +1,55 @@
+##########
+# Core DL stack
+##########
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+pytorch-lightning==2.5.6
+torchmetrics==1.8.2
+timm==1.0.22
+einops==0.8.1
+
+##########
+# Experiment tracking / logging
+##########
+wandb==0.23.0
+tensorboard==2.20.0
+
+##########
+# Numerics & ML
+##########
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.16.3
+matplotlib==3.10.7
+seaborn==0.13.2
+
+##########
+# Utilities
+##########
+tqdm==4.67.1
+pillow==12.0.0
+opencv-python==4.12.0.88
+pyyaml==6.0.1
+omegaconf==2.3.0
+pydantic==2.12.4
+python-dotenv==1.2.1
+requests==2.32.5
+urllib3==2.5.0
+certifi==2025.11.12
+
+##########
+# Jupyter / notebook stack
+##########
+jupyter==1.0.0
+ipython==8.23.0
+ipykernel==6.29.5
+nbconvert==7.16.4
+notebook==7.2.1
+
+##########
+# Hugging Face ecosystem
+##########
+huggingface-hub==1.1.4
+transformers==4.57.1
