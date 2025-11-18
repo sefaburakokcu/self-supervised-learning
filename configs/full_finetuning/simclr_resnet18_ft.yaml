@@ -5,7 +5,7 @@ ssl_method: simclr
 pretrained_method: simclr_resnet18
 mode: finetune
 finetune_epochs: 100
-batch_size: 64
+batch_size: 128
 linear_probe: false
 
 optimizer: sgd

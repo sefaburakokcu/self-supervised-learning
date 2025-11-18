@@ -4,7 +4,7 @@ arch: resnet18
 ssl_method: simclr
 mode: pretrain
 epochs: 200
-batch_size: 1024
+batch_size: 512
 
 optimizer: adamw
 optimizer_params:
