@@ -131,7 +131,7 @@ class SSLTrainer:
             'global_step': self.global_step
         }
 
-        path = self.log_dir / f'checkpoint_epoch_{epoch}.pth'
+        path = self.log_dir / f'latest_model.pth'
         torch.save(checkpoint, path)
 
         if self.logger:
