@@ -1,8 +1,8 @@
-# Linear Probing: SimCLR pretrained ResNet-18
-name: simclr_resnet18_lp
-arch: resnet18
+# Linear Probing: SimCLR pretrained ResNet-50
+name: simclr_resnet50_lp
+arch: resnet50
 ssl_method: simclr
-pretrained_method: simclr_resnet18
+pretrained_method: simclr_resnet50
 mode: finetune
 finetune_epochs: 100
 batch_size: 256

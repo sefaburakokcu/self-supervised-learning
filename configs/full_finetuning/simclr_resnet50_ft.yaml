@@ -1,10 +1,11 @@
-# Transfer Learning: ImageNet pretrained ResNet-50
-name: imagenet_resnet50
+# Full Fine-tuning: SimCLR pretrained ResNet-50
+name: simclr_resnet50_ft
 arch: resnet50
+ssl_method: simclr
+pretrained_method: simclr_resnet50
 mode: finetune
 finetune_epochs: 100
 batch_size: 256
-use_imagenet: true
 linear_probe: false
 
 optimizer: sgd

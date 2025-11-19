@@ -2,7 +2,7 @@
 device: cuda
 use_wandb: false
 seed: 42
-num_workers: 4
+num_workers: 8
 data_dir: ./datasets
 checkpoint_dir: ./checkpoints
 log_dir: ./logs

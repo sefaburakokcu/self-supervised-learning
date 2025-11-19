@@ -3,7 +3,7 @@ name: imagenet_resnet18
 arch: resnet18
 mode: finetune
 finetune_epochs: 100
-batch_size: 128
+batch_size: 256
 use_imagenet: true
 linear_probe: false
 
