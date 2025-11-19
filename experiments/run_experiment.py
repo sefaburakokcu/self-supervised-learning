@@ -322,12 +322,15 @@ def main():
 
           SimCLR pretraining:
           python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18
+          python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet50
 
           Linear probing:
           python experiments/run_experiment.py --experiment linear_probing/simclr_resnet18_lp
+          python experiments/run_experiment.py --experiment linear_probing/simclr_resnet50_lp
 
           Full fine-tuning:
           python experiments/run_experiment.py --experiment full_finetune/simclr_resnet18_ft
+          python experiments/run_experiment.py --experiment full_finetune/simclr_resnet50_ft
 
           Transfer learning (ImageNet):
           python experiments/run_experiment.py --experiment transfer_learning/imagenet_resnet18
