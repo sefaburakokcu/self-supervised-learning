@@ -103,7 +103,7 @@ class ExperimentRunner:
             self.logger.info(f"SSL data loader created")
 
             self.logger.info(f"Creating encoder: {self.config['arch']}")
-            encoder = create_encoder(self.config['arch'], pretrained=False)
+            encoder = create_encoder(self.config['arch'], pretrained=False, num_classes=int(self.config['projection_dim'])*4)
 
             ssl_kwargs = {}
             for key in ['projection_dim', 'hidden_dim', 'temperature', 'momentum',
@@ -197,7 +197,8 @@ class ExperimentRunner:
                 data_dir=self.config.get('data_dir', './datasets'),
                 num_workers=self.config.get('num_workers', 4)
             )
-            train_loader, test_loader = data_module.get_supervised_dataloaders()
+            train_loader, test_loader = data_module.get_supervised_dataloaders(
+                samples_per_class=self.config.get('samples_per_class', None))
             self.logger.info("Supervised data loaders created")
 
             if pretrained_path:
