@@ -8,6 +8,8 @@ finetune_epochs: 100
 batch_size: 256
 linear_probe: false
 
+samples_per_class: 50
+
 optimizer: sgd
 optimizer_params:
   lr: 0.01

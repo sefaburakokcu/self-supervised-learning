@@ -1,12 +1,13 @@
-# Full Fine-tuning: SimCLR pretrained ResNet-18
-name: simclr_resnet18_ft
+# Transfer Learning: ImageNet pretrained ResNet-18
+name: imagenet_resnet18
 arch: resnet18
-ssl_method: simclr
-pretrained_method: simclr_resnet18
 mode: finetune
 finetune_epochs: 100
 batch_size: 256
+use_imagenet: true
 linear_probe: false
+
+samples_per_class: 50
 
 optimizer: sgd
 optimizer_params:

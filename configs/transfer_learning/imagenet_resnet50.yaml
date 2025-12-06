@@ -15,5 +15,5 @@ optimizer_params:
 
 scheduler: step
 scheduler_params:
-  step_size: 30
+  step_size: 25
   gamma: 0.1
