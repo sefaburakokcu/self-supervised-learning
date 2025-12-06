@@ -42,14 +42,20 @@ log ""
 
 # Array of experiments
 experiments=(
+    "baselines/baseline_resnet18_sample50"
+    "baselines/baseline_resnet18"
+    "baselines/baseline_resnet50"
+    "transfer_learning/imagenet_resnet18"
+    "transfer_learning/imagenet_resnet18_sample50"
+    "transfer_learning/imagenet_resnet50"
     "ssl_pretraining/simclr_resnet18"
     "ssl_pretraining/simclr_resnet50"
     "linear_probing/simclr_resnet18_lp"
+    "linear_probing/simclr_resnet18_lp_sample50"
     "linear_probing/simclr_resnet50_lp"
     "full_finetune/simclr_resnet18_ft"
+    "full_finetune/simclr_resnet18_ft_sample50"
     "full_finetune/simclr_resnet50_ft"
-    "transfer_learning/imagenet_resnet18"
-    "transfer_learning/imagenet_resnet50"
 )
 
 # Tracking variables
