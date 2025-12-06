@@ -2,8 +2,8 @@
 name: simclr_resnet50_lp
 arch: resnet50
 ssl_method: simclr
-pretrained_method: simclr_resnet50
 mode: finetune
+pretrained_path: "./checkpoints/simclr_resnet50/best_model.pth"
 finetune_epochs: 100
 batch_size: 256
 linear_probe: true

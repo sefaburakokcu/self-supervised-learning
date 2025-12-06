@@ -11,12 +11,13 @@ class SimCLR(nn.Module):
         self.encoder = encoder
         self.temperature = temperature
 
-        feature_dim = encoder.fc.out_features
-        #projection_dim * 4
+        feature_dim = encoder.fc.in_features
+        encoder.fc = nn.Identity()
 
         self.projection_head = nn.Sequential(
+            nn.Linear(feature_dim, projection_dim*4),
             nn.ReLU(inplace=True),
-            nn.Linear(feature_dim, projection_dim)
+            nn.Linear(projection_dim*4, projection_dim)
         )
 
     def forward(self, x1, x2):

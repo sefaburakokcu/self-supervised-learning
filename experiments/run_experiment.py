@@ -1,3 +1,4 @@
+import os
 import torch
 import wandb
 import argparse
@@ -214,7 +215,7 @@ class ExperimentRunner:
                 encoder = create_encoder(self.config['arch'], pretrained=True)
 
             else:
-                self.logger.info("Training from scratch (no pretrained weights)")
+                self.logger.warning("Training from scratch (no pretrained weights)")
                 encoder = create_encoder(self.config['arch'], pretrained=False)
 
             linear_probe = self.config.get('linear_probe', False)
@@ -289,19 +290,38 @@ class ExperimentRunner:
     def run(self):
         """Execute experiment"""
         self.logger.info(f"Starting experiment: {self.experiment_name}")
-        self.logger.info(f"Mode: {self.config.get('mode', 'full')}")
+        mode = self.config.get('mode', None)
+        if mode is None:
+            self.logger.error("Experiment mode not specified in config")
+            raise ValueError("Experiment mode not specified in config")
 
-        mode = self.config.get('mode', 'full')
-        pretrained_path = None
+        self.logger.info(f"Mode: {mode}")
 
         try:
-            if mode in ['pretrain', 'full']:
+            if mode in ['pretrain']:
                 self.logger.info("Executing pretraining phase")
-                pretrained_path = self.run_ssl_pretraining()
+                self.run_ssl_pretraining()
 
-            if mode in ['finetune', 'full']:
+            if mode in ['finetune']:
                 self.logger.info("Executing fine-tuning phase")
+                pretrained_path = self.config.get('pretrained_path', None)
+                if pretrained_path is not None:
+                    self.logger.info(f"Using pretrained model from: {pretrained_path}")
+                    if not os.path.exists(pretrained_path):
+                        self.logger.error(f"Pretrained model not found: {pretrained_path}")
+                        raise FileNotFoundError(f"Pretrained model not found: {pretrained_path}")
+                else:
+                    if self.config.get('use_imagenet', False):
+                        self.logger.info("Using ImageNet pretrained weights for fine-tuning")
+                    else:
+                        self.logger.error("No pretrained model specified for fine-tuning")
+                        raise ValueError("No pretrained model specified for fine-tuning")
+
                 self.run_finetuning(pretrained_path)
+
+            if mode in ['scratch']:
+                self.logger.info("Executing training from scratch")
+                self.run_finetuning(pretrained_path=None)
 
             self.logger.info(f"Experiment completed successfully: {self.experiment_name}")
 
