@@ -10,10 +10,11 @@ linear_probe: true
 
 optimizer: sgd
 optimizer_params:
-  lr: 0.01
+  lr: 0.1
   momentum: 0.9
-  weight_decay: 0.0
-
+  weight_decay: 1e-4
+  nesterov: true
+  
 scheduler: step
 scheduler_params:
   step_size: 25
