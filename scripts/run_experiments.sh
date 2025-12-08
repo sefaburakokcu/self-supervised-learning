@@ -53,9 +53,9 @@ experiments=(
     "linear_probing/simclr_resnet18_lp"
     "linear_probing/simclr_resnet18_lp_sample50"
     "linear_probing/simclr_resnet50_lp"
-    "full_finetune/simclr_resnet18_ft"
-    "full_finetune/simclr_resnet18_ft_sample50"
-    "full_finetune/simclr_resnet50_ft"
+    "full_finetuning/simclr_resnet18_ft"
+    "full_finetuning/simclr_resnet18_ft_sample50"
+    "full_finetuning/simclr_resnet50_ft"
 )
 
 # Tracking variables

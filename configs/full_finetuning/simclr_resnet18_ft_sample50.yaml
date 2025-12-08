@@ -1,5 +1,5 @@
 # Full Fine-tuning: SimCLR pretrained ResNet-18
-name: simclr_resnet18_ft
+name: simclr_resnet18_ft_sample50
 arch: resnet18
 ssl_method: simclr
 mode: finetune

@@ -1,5 +1,5 @@
 # Baseline ResNet-18 from scratch
-name: baseline_resnet18
+name: baseline_resnet18_sample50
 arch: resnet18
 mode: scratch
 finetune_epochs: 200
