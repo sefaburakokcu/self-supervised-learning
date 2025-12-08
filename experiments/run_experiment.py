@@ -205,9 +205,15 @@ class ExperimentRunner:
             if pretrained_path:
                 self.logger.info(f"Loading pretrained weights from {pretrained_path}")
                 checkpoint = torch.load(pretrained_path, map_location=self.device)
+                state_dict = checkpoint['model_state_dict']
+                encoder_state = {
+                    k.replace('encoder.', ''): v
+                    for k, v in state_dict.items()
+                    if k.startswith('encoder.')
+                }
 
                 encoder = create_encoder(self.config['arch'], pretrained=False)
-                encoder.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                encoder.load_state_dict(encoder_state, strict=False)
                 self.logger.info("Pretrained weights loaded successfully")
 
             elif self.config.get('use_imagenet', False):

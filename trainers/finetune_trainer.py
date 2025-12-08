@@ -36,11 +36,12 @@ class FineTuneTrainer:
         self.num_classes = num_classes
         self.logger = logger
         self.use_wandb = use_wandb
+        self.freeze_encoder = freeze_encoder
 
         feature_dim = self._get_feature_dim()
         self.classifier = nn.Linear(feature_dim, num_classes).to(device)
 
-        if freeze_encoder:
+        if self.freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
@@ -71,7 +72,12 @@ class FineTuneTrainer:
         Returns:
             avg_loss, accuracy
         """
-        self.encoder.train()
+        if self.freeze_encoder:
+            # Linear probe: do NOT update BN stats / dropout
+            self.encoder.eval()
+        else:
+            # Full fine-tuning
+            self.encoder.train()
         self.classifier.train()
 
         total_loss = 0
