@@ -9,7 +9,7 @@ The framework supports pretraining, linear probing, and fine-tuning workflows.
 * ResNet and Vision Transformer backbones
 * Evaluation on STL-10 using accuracy and F1-score
 * Notebook support for easy experimentation
-* Unified JSON-based experiment configuration system
+* YAML-based experiment configuration
 
 ## Requirements
 
