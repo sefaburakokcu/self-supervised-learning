@@ -50,6 +50,16 @@ SimCLR pretraining:
 python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet18
 ```
 
+Run all experiments sequentially:
+
+For convenience and full reproducibility, all experiments can be executed sequentially using the provided 
+bash script. This is useful for running the complete experimental pipeline including baselines, 
+SimCLR pretraining, linear probing, and fine-tuning.
+
+```bash
+bash scripts/run_experiemens.sh
+```
+
 ### Experiment Types
 
 * Baselines (supervised training)
@@ -68,6 +78,8 @@ python experiments/run_experiment.py --experiment ssl_pretraining/simclr_resnet1
 self-supervised-learning/
 ├── experiments/
 │   └── run_experiment.py
+├── scripts/
+│   └── run_experiments.sh
 ├── models/
 ├── data/
 ├── trainers/
@@ -95,3 +107,39 @@ Each experiment generates:
 * Training logs
 * Configuration snapshots
 * Final accuracy and F1-score
+
+## Experimental Results
+
+We evaluate the proposed self-supervised learning framework on the **STL-10** dataset under three settings: SimCLR pretraining, full supervised training, and few-shot learning. Results demonstrate the effectiveness of SimCLR pretraining, especially when combined with fine-tuning.
+
+### SimCLR Pretraining (Unlabeled STL-10)
+
+| Backbone  | Epochs | Batch Size | Training Time (min) | Final Loss |
+| --------- | ------ | ---------- | ------------------- | ---------- |
+| ResNet-18 | 200    | 256        | 138.6               | 0.2049     |
+| ResNet-50 | 200    | 256        | 481.9               | 0.1632     |
+
+### Full Supervised Evaluation (500 images/class)
+
+| Backbone  | Strategy                 | Accuracy   |
+| --------- | ------------------------ | ---------- |
+| ResNet-18 | Baseline (Scratch)       | 75.32%     |
+| ResNet-18 | SimCLR + Linear Probing  | 75.08%     |
+| ResNet-18 | **SimCLR + Fine-Tuning** | **78.89%** |
+| ResNet-50 | Baseline (Scratch)       | 58.24%     |
+| ResNet-50 | SimCLR + Linear Probing  | 75.96%     |
+| ResNet-50 | **SimCLR + Fine-Tuning** | **80.59%** |
+
+### Few-Shot Learning (50 images/class, ResNet-18)
+
+| Strategy                 | Accuracy   |
+| ------------------------ | ---------- |
+| Baseline (Scratch)       | 48.63%     |
+| SimCLR + Linear Probing  | 66.34%     |
+| **SimCLR + Fine-Tuning** | **69.24%** |
+
+### Key Observations
+
+* SimCLR pretraining significantly improves downstream performance, especially in **low-label (few-shot)** settings.
+* Fine-tuning consistently outperforms linear probing.
+* Deeper backbones (ResNet-50) benefit more from self-supervised pretraining compared to training from scratch.
